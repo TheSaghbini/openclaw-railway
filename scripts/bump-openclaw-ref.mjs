@@ -34,6 +34,13 @@ function replaceTag(dockerfile, next) {
   return dockerfile.replace(re, `\nARG OPENCLAW_GIT_REF=${next}\n`);
 }
 
+/** Parse a version tag like "v2026.2.9" into { major, minor, patch }. */
+function parseVersion(tag) {
+  const m = tag.match(/^v?(\d+)\.(\d+)\.(\d+)/);
+  if (!m) return null;
+  return { major: Number(m[1]), minor: Number(m[2]), patch: Number(m[3]) };
+}
+
 const latest = await gh(`/repos/${owner}/${repo}/releases/latest`);
 const latestTag = latest.tag_name;
 if (!latestTag) throw new Error("No tag_name in latest release response");
@@ -50,5 +57,15 @@ if (currentTag === latestTag) {
   process.exit(0);
 }
 
+// Warn on major version jumps (but still proceed — CI will validate the build).
+const currentVer = parseVersion(currentTag);
+const latestVer = parseVersion(latestTag);
+if (currentVer && latestVer && latestVer.major !== currentVer.major) {
+  console.warn(
+    `⚠️  Major version jump detected: ${currentTag} → ${latestTag}. ` +
+    `The Docker build CI will validate compatibility.`
+  );
+}
+
 fs.writeFileSync(dockerPath, replaceTag(docker, latestTag));
-console.log(`Updated ${dockerPath} to ${latestTag}`);
+console.log(`Updated ${dockerPath}: ${currentTag} → ${latestTag}`);
