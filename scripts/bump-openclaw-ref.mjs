@@ -52,8 +52,18 @@ if (!currentTag) throw new Error("Could not parse current OPENCLAW_GIT_REF");
 
 console.log(`current=${currentTag} latest=${latestTag}`);
 
+// "latest" is the dynamic default — always replace with the actual tag
+// so the git history records which version was deployed.
 if (currentTag === latestTag) {
   console.log("No update needed.");
+  process.exit(0);
+}
+
+// If current is "latest" (dynamic default), pin it to the actual release tag.
+if (currentTag === "latest") {
+  console.log(`Pinning dynamic "latest" default → ${latestTag}`);
+  fs.writeFileSync(dockerPath, replaceTag(docker, latestTag));
+  console.log(`Updated ${dockerPath}: latest → ${latestTag}`);
   process.exit(0);
 }
 
