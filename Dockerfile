@@ -41,9 +41,8 @@ RUN set -eux; \
   done
 
 # Patch: allow empty text in webhook wake (for Paperclip integration)
-# Default to "wake from webhook" when no text is provided
-COPY scripts/patch-paperclip.js scripts/patch-paperclip.js
-RUN node scripts/patch-paperclip.js
+# Copy pre-patched hooks.ts that allows empty text
+COPY patches/hooks.ts src/gateway/hooks.ts
 
 RUN pnpm install --no-frozen-lockfile
 RUN pnpm build
