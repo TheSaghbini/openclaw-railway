@@ -356,9 +356,22 @@ export function normalizeAgentPayload(payload: Record<string, unknown>):
       value: HookAgentPayload;
     }
   | { ok: false; error: string } {
-  const message = typeof payload.message === "string" ? payload.message.trim() : "";
+  // Accept message directly, or derive from Paperclip's wakeTriggerDetail
+  let message = typeof payload.message === "string" ? payload.message.trim() : "";
+  
+  // Paperclip integration: use wakeTriggerDetail as fallback message
+  if (!message && typeof payload.wakeTriggerDetail === "string") {
+    message = payload.wakeTriggerDetail.trim();
+  }
+  
+  // Paperclip integration: use wakeSource as additional context
+  if (!message && typeof payload.wakeSource === "string") {
+    message = `wake from ${payload.wakeSource}`.trim();
+  }
+  
+  // Default message for webhooks without message (e.g., Paperclip)
   if (!message) {
-    return { ok: false, error: "message required" };
+    message = "wake from webhook";
   }
   const nameRaw = payload.name;
   const name = typeof nameRaw === "string" && nameRaw.trim() ? nameRaw.trim() : "Hook";
