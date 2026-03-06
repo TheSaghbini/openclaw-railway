@@ -93,4 +93,5 @@ EXPOSE 8080
 
 # Ensure PID 1 reaps zombies and forwards signals.
 ENTRYPOINT ["tini", "--"]
-CMD ["node", "src/server.js"]
+CMD ["node", "/openclaw/dist/entry.js", "gateway", "run", "--bind", "all", "--port", "8080", "--auth", "token", "--token", "${OPENCLAW_GATEWAY_TOKEN}"]
+
