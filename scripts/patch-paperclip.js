@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 
+// Script is at /openclaw/scripts/patch-paperclip.js
+// hooks.ts is at /openclaw/src/gateway/hooks.ts
 const hooksFile = path.join(__dirname, '..', 'src', 'gateway', 'hooks.ts');
 
 try {
@@ -28,8 +30,13 @@ try {
     console.log('✅ Patched hooks.ts for Paperclip integration');
   } else {
     console.log('⚠️ hooks.ts already patched or pattern not found');
+    // Debug: show what we found
+    if (content.includes('finalText')) {
+      console.log('   Already has finalText - patch was applied');
+    }
   }
 } catch (err) {
   console.error('❌ Failed to patch:', err.message);
+  console.error('   Tried to read:', hooksFile);
   process.exit(1);
 }
