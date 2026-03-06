@@ -40,6 +40,11 @@ RUN set -eux; \
     sed -i -E 's/"openclaw"[[:space:]]*:[[:space:]]*"workspace:[^"]+"/"openclaw": "*"/g' "$f"; \
   done
 
+# Patch: allow empty text in webhook wake (for Paperclip integration)
+# Default to "wake from webhook" when no text is provided
+COPY scripts/patch-paperclip.js scripts/patch-paperclip.js
+RUN node scripts/patch-paperclip.js
+
 RUN pnpm install --no-frozen-lockfile
 RUN pnpm build
 ENV OPENCLAW_PREFER_PNPM=1
