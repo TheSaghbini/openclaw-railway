@@ -99,4 +99,4 @@ EXPOSE 8080
 
 # Ensure PID 1 reaps zombies and forwards signals.
 ENTRYPOINT ["tini", "--"]
-CMD ["sh", "-c", "node /openclaw/dist/entry.js config set gateway.auth.token \"$OPENCLAW_GATEWAY_TOKEN\" && echo '✅ Gateway token saved to config'"]
+CMD ["sh", "-c", "node /openclaw/dist/entry.js config set hooks.token \"$(openssl rand -hex 32)\" && echo '✅ Hooks token set'"]
