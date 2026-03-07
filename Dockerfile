@@ -43,6 +43,8 @@ RUN set -eux; \
 # Patch: allow empty text in webhook wake (for Paperclip integration)
 # Copy pre-patched hooks.ts that allows empty text
 COPY patches/hooks.ts src/gateway/hooks.ts
+COPY patches/server-hooks.ts src/gateway/server/hooks.ts
+COPY patches/server-http.ts src/gateway/server-http.ts
 
 RUN pnpm install --no-frozen-lockfile
 RUN pnpm build
