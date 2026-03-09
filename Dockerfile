@@ -101,4 +101,4 @@ EXPOSE 8080
 ENTRYPOINT ["tini", "--"]
 # Use shell form to expand env vars
 # CMD ["sh", "-c", "node /openclaw/dist/entry.js gateway run --bind lan --port ${PORT:-8080} --auth token --token $OPENCLAW_GATEWAY_TOKEN"]
-CMD ["sh", "-c", "node /openclaw/dist/entry.js config set gateway.port 8080 && node /openclaw/dist/entry.js config set gateway.bind lan && node /openclaw/dist/entry.js config set gateway.auth.mode token && node /openclaw/dist/entry.js config set gateway.trustedProxies '[\"10.0.0.0/8\",\"172.16.0.0/12\",\"100.64.0.0/10\",\"127.0.0.1/32\"]' && echo '✅ 2026.3.7 Railway config saved'"]
+CMD ["node", "/openclaw/dist/entry.js", "gateway", "run", "--bind", "lan", "--port", "8080"]
