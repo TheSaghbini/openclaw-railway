@@ -40,6 +40,12 @@ RUN set -eux; \
     sed -i -E 's/"openclaw"[[:space:]]*:[[:space:]]*"workspace:[^"]+"/"openclaw": "*"/g' "$f"; \
   done
 
+# Patch: allow empty text in webhook wake (for Paperclip integration)
+# Copy pre-patched hooks.ts that allows empty text
+COPY patches/hooks.ts src/gateway/hooks.ts
+COPY patches/server-hooks.ts src/gateway/server/hooks.ts
+COPY patches/server-http.ts src/gateway/server-http.ts
+
 RUN pnpm install --no-frozen-lockfile
 RUN pnpm build
 ENV OPENCLAW_PREFER_PNPM=1
@@ -93,4 +99,12 @@ EXPOSE 8080
 
 # Ensure PID 1 reaps zombies and forwards signals.
 ENTRYPOINT ["tini", "--"]
-CMD ["node", "src/server.js"]
+# Use shell form to expand env vars
+# CMD ["sh", "-c", "node /openclaw/dist/entry.js gateway run --bind lan --port ${PORT:-8080} --auth token --token $OPENCLAW_GATEWAY_TOKEN"]
+# CMD ["sh", "-c", "node /openclaw/dist/entry.js config set gateway.remote.token \"${OPENCLAW_GATEWAY_TOKEN}\" && echo '✅ gateway.remote.token set successfully'"]
+# CMD ["node", "/openclaw/dist/entry.js", "gateway", "run", "--bind", "lan", "--port", "8080"]
+# === TEMPORARY CONFIG STEP (run this ONCE) ===
+# CMD ["sh", "-c", "node /openclaw/dist/entry.js config set gateway.controlUi.dangerouslyDisableDeviceAuth false && node /openclaw/dist/entry.js config set gateway.controlUi.allowInsecureAuth false && node /openclaw/dist/entry.js config set gateway.publicUrl \"https://opensagh.up.railway.app\" && node /openclaw/dist/entry.js config set gateway.remote.token \"${OPENCLAW_GATEWAY_TOKEN}\" && node /openclaw/dist/entry.js config set gateway.trustedProxies '[\"10.0.0.0/8\",\"172.16.0.0/12\",\"100.64.0.0/10\",\"127.0.0.1/32\"]' && node /openclaw/dist/entry.js config set gateway.controlUi.allowedOrigins '[\"https://opensagh.up.railway.app\"]' && node /openclaw/dist/entry.js config set plugins.allow '[\"open-webui\"]' && echo \"✅ 2026.3.7 Railway secure config applied\""]
+# === TEMPORARY CONFIG STEP (run this once) ===
+# CMD ["sh", "-c", "node /openclaw/dist/entry.js config set gateway.remote.token \"${OPENCLAW_GATEWAY_TOKEN}\" && node /openclaw/dist/entry.js config set gateway.trustedProxies '[\"10.0.0.0/8\",\"172.16.0.0/12\",\"100.64.0.0/10\",\"127.0.0.1/32\"]' && node /openclaw/dist/entry.js config set gateway.controlUi.allowedOrigins '[\"https://opensagh.up.railway.app\"]' && node /openclaw/dist/entry.js config set plugins.allow '[\"open-webui\"]' && echo \"✅ 2026.3.7 Railway secure config applied\""]
+CMD ["node", "/openclaw/dist/entry.js", "gateway", "run", "--bind", "lan", "--port", "8080"]
