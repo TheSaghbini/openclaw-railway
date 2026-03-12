@@ -70,6 +70,9 @@ function resolveGatewayToken() {
 const OPENCLAW_GATEWAY_TOKEN = resolveGatewayToken();
 process.env.OPENCLAW_GATEWAY_TOKEN = OPENCLAW_GATEWAY_TOKEN;
 
+const CONTROL_UI_BOOTSTRAP_COOKIE = "openclaw_control_ui_bootstrap";
+const CONTROL_UI_ENTRY_PATHS = new Set(["/", "/openclaw", "/openclaw/"]);
+
 // Where the gateway will listen internally (we proxy to it).
 const INTERNAL_GATEWAY_PORT = Number.parseInt(process.env.INTERNAL_GATEWAY_PORT ?? "18789", 10);
 const INTERNAL_GATEWAY_HOST = process.env.INTERNAL_GATEWAY_HOST ?? "127.0.0.1";
@@ -738,10 +741,10 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
 
   // Optional setup (only after successful onboarding).
   if (ok) {
-    // Ensure gateway token is written into config so the browser UI can authenticate reliably.
+    // Ensure gateway auth is written into config.
     // (We also enforce loopback bind since the wrapper proxies externally.)
-    // IMPORTANT: Set both gateway.auth.token (server-side) and gateway.remote.token (client-side)
-    // to the same value so the Control UI can connect without "token mismatch" errors.
+    // Keep gateway.remote.token aligned for native remote clients; the hosted browser Control UI
+    // is bootstrapped by this wrapper from gateway.auth.token on first page load.
     await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.auth.mode", "token"]));
     await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.auth.token", OPENCLAW_GATEWAY_TOKEN]));
     await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.remote.token", OPENCLAW_GATEWAY_TOKEN]));
@@ -1330,13 +1333,58 @@ proxy.on("error", (err, _req, res) => {
 
 function attachGatewayAuthHeader(req) {
   // When running behind the Railway wrapper, the gateway is only reachable from this container.
-  // The Control UI running in the browser cannot set custom Authorization headers for WebSocket
-  // connections, so we terminate auth at the wrapper by injecting the token into proxied
-  // requests.
+  // Newer Control UI builds authenticate inside connect.params.auth.*, not via HTTP headers.
+  // Keep injecting Authorization for gateway HTTP endpoints and older auth paths that still
+  // honor bearer headers during proxying.
   if (!req?.headers?.authorization && OPENCLAW_GATEWAY_TOKEN) {
     req.headers.authorization = `Bearer ${OPENCLAW_GATEWAY_TOKEN}`;
   }
 }
+
+function cookieHeaderHasValue(cookieHeader, name, expected = "1") {
+  const target = `${name}=${expected}`;
+  return String(cookieHeader || "").split(/;\s*/).includes(target);
+}
+
+function shouldBootstrapControlUi(method, reqPath, cookieHeader, token) {
+  return Boolean(token)
+    && method === "GET"
+    && CONTROL_UI_ENTRY_PATHS.has(reqPath)
+    && !cookieHeaderHasValue(cookieHeader, CONTROL_UI_BOOTSTRAP_COOKIE);
+}
+
+function buildControlUiBootstrapLocation(rawUrl, token) {
+  const url = new URL(rawUrl || "/", "http://openclaw.local");
+  const fragment = new URLSearchParams(url.hash ? url.hash.slice(1) : "");
+  fragment.set("token", token);
+  url.hash = fragment.toString();
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function setControlUiBootstrapCookie(res, enabled) {
+  const value = enabled ? "1" : "";
+  const maxAge = enabled ? 15 : 0;
+  res.append(
+    "Set-Cookie",
+    `${CONTROL_UI_BOOTSTRAP_COOKIE}=${value}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax`,
+  );
+}
+
+app.get(["/", "/openclaw", "/openclaw/"], (req, res, next) => {
+  if (!isConfigured()) return next();
+
+  if (shouldBootstrapControlUi(req.method, req.path, req.headers.cookie, OPENCLAW_GATEWAY_TOKEN)) {
+    setControlUiBootstrapCookie(res, true);
+    res.set("Cache-Control", "no-store");
+    return res.redirect(302, buildControlUiBootstrapLocation(req.originalUrl || req.url, OPENCLAW_GATEWAY_TOKEN));
+  }
+
+  if (cookieHeaderHasValue(req.headers.cookie, CONTROL_UI_BOOTSTRAP_COOKIE)) {
+    setControlUiBootstrapCookie(res, false);
+  }
+
+  return next();
+});
 
 app.use(async (req, res) => {
   // If not configured, force users to /setup for any non-setup routes.

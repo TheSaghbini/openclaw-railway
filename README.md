@@ -118,13 +118,13 @@ Fix:
 
 If `openclaw devices list` shows no pending request IDs:
 - Make sure you’re visiting the Control UI at `/openclaw` (or your native app) and letting it attempt to connect
-  - Note: the Railway wrapper now proxies the gateway and injects the auth token automatically, so you should not need to paste the gateway token into the Control UI when using `/openclaw`.
+  - Note: current OpenClaw dashboard auth is sent as `connect.params.auth.token` from the browser. This wrapper bootstraps `/` and `/openclaw` with the configured gateway token automatically, so you should not need to paste it manually when opening the hosted UI in a fresh tab.
 - Ensure your state dir is the Railway volume (recommended): `OPENCLAW_STATE_DIR=/data/.openclaw`
 - Check `/setup/api/debug` for the active state/workspace dirs + gateway readiness
 
 ### “unauthorized: gateway token mismatch”
 
-The Control UI connects using `gateway.remote.token` and the gateway validates `gateway.auth.token`.
+Remote OpenClaw clients use `gateway.remote.token` and the gateway validates `gateway.auth.token`.
 
 Fix:
 - Re-run `/setup` so the wrapper writes both tokens.
