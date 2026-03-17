@@ -67,6 +67,11 @@ type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 const HOOK_AUTH_FAILURE_LIMIT = 20;
 const HOOK_AUTH_FAILURE_WINDOW_MS = 60_000;
 
+export type HookClientIpConfig = Readonly<{
+  trustedProxies?: string[];
+  allowRealIpFallback?: boolean;
+}>;
+
 type HookDispatchers = {
   dispatchWakeHook: (value: { text: string; mode: "now" | "next-heartbeat" }) => void;
   dispatchAgentHook: (value: HookAgentDispatchPayload) => string;
@@ -230,9 +235,10 @@ export function createHooksRequestHandler(
     bindHost: string;
     port: number;
     logHooks: SubsystemLogger;
+    getClientIpConfig?: () => HookClientIpConfig;
   } & HookDispatchers,
 ): HooksRequestHandler {
-  const { getHooksConfig, logHooks, dispatchAgentHook, dispatchAgentHookStreaming, dispatchWakeHook } = opts;
+  const { getHooksConfig, logHooks, dispatchAgentHook, dispatchAgentHookStreaming, dispatchWakeHook, getClientIpConfig } = opts;
   const hookAuthLimiter = createAuthRateLimiter({
     maxAttempts: HOOK_AUTH_FAILURE_LIMIT,
     windowMs: HOOK_AUTH_FAILURE_WINDOW_MS,
@@ -243,7 +249,16 @@ export function createHooksRequestHandler(
   });
 
   const resolveHookClientKey = (req: IncomingMessage): string => {
-    return normalizeRateLimitClientIp(req.socket?.remoteAddress);
+    const clientIpConfig = getClientIpConfig?.();
+    let clientIp = req.socket?.remoteAddress;
+    if (clientIpConfig?.trustedProxies?.length) {
+      const xff = req.headers["x-forwarded-for"];
+      if (typeof xff === "string") {
+        const first = xff.split(",")[0]?.trim();
+        if (first) clientIp = first;
+      }
+    }
+    return normalizeRateLimitClientIp(clientIp);
   };
 
   return async (req, res) => {

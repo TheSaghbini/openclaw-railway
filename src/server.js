@@ -139,12 +139,19 @@ function isConfigured() {
 
 let gatewayProc = null;
 let gatewayStarting = null;
+let shuttingDown = false;
 
 // Debug breadcrumbs for common Railway failures (502 / "Application failed to respond").
 let lastGatewayError = null;
 let lastGatewayExit = null;
 let lastDoctorOutput = null;
 let lastDoctorAt = null;
+
+// Auto-restart: exponential backoff state.
+let autoRestartConsecutiveFailures = 0;
+let autoRestartTimer = null;
+const AUTO_RESTART_BASE_DELAY_MS = 2_000;   // 2 s initial delay
+const AUTO_RESTART_MAX_DELAY_MS = 120_000;  // cap at 2 min
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -215,7 +222,46 @@ async function startGateway() {
     console.error(msg);
     lastGatewayExit = { code, signal, at: new Date().toISOString() };
     gatewayProc = null;
+    scheduleGatewayAutoRestart();
   });
+}
+
+/**
+ * Automatically re-launch the gateway after it exits, unless the wrapper
+ * itself is shutting down or the instance is not yet configured.
+ * Uses exponential backoff (2 s → 4 s → 8 s … capped at 2 min) to avoid
+ * tight crash-loops that would saturate logs or Railway build minutes.
+ */
+function scheduleGatewayAutoRestart() {
+  if (shuttingDown || !isConfigured()) return;
+  // Clear any previously scheduled restart to avoid duplicates.
+  if (autoRestartTimer) { clearTimeout(autoRestartTimer); autoRestartTimer = null; }
+
+  autoRestartConsecutiveFailures++;
+  const delay = Math.min(
+    AUTO_RESTART_BASE_DELAY_MS * 2 ** (autoRestartConsecutiveFailures - 1),
+    AUTO_RESTART_MAX_DELAY_MS,
+  );
+  console.error(
+    `[gateway] scheduling auto-restart in ${delay} ms (attempt ${autoRestartConsecutiveFailures})`,
+  );
+
+  autoRestartTimer = setTimeout(async () => {
+    autoRestartTimer = null;
+    if (shuttingDown || gatewayProc) return;
+    try {
+      await ensureGatewayRunning();
+      // Success — reset the backoff counter.
+      autoRestartConsecutiveFailures = 0;
+      console.error("[gateway] auto-restart succeeded");
+    } catch (err) {
+      console.error(`[gateway] auto-restart failed: ${String(err)}`);
+      // ensureGatewayRunning already recorded the error; the next exit
+      // event (or this path) will schedule yet another attempt.
+      scheduleGatewayAutoRestart();
+    }
+  }, delay);
+  autoRestartTimer.unref?.();  // Don't keep the process alive just for this timer.
 }
 
 async function runDoctorBestEffort() {
@@ -261,6 +307,10 @@ async function ensureGatewayRunning() {
 }
 
 async function restartGateway() {
+  // Cancel any pending auto-restart so we don't double-spawn.
+  if (autoRestartTimer) { clearTimeout(autoRestartTimer); autoRestartTimer = null; }
+  autoRestartConsecutiveFailures = 0;
+
   if (gatewayProc) {
     try {
       gatewayProc.kill("SIGTERM");
@@ -1481,6 +1531,8 @@ server.on("upgrade", async (req, socket, head) => {
 });
 
 process.on("SIGTERM", () => {
+  shuttingDown = true;
+  if (autoRestartTimer) { clearTimeout(autoRestartTimer); autoRestartTimer = null; }
   // Best-effort shutdown
   try {
     if (gatewayProc) gatewayProc.kill("SIGTERM");
